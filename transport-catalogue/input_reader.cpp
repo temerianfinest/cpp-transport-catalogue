@@ -2,8 +2,6 @@
 
 namespace TransportSystem {
 
-InputReader::InputReader(std::istream& input_stream) : input_stream_(input_stream) {}
-
 Coordinates ParseCoordinates(std::string_view str) {
     static const double nan = std::nan("");
 
@@ -81,7 +79,7 @@ CommandDescription ParseCommandDescription(std::string_view line) {
             line.substr(colon_pos + 1)};
 }
 
-// Добавлено определение функций-членов CommandDescription
+    
 CommandDescription::operator bool() const {
     return !command.empty() && !id.empty() && !description.empty();
 }

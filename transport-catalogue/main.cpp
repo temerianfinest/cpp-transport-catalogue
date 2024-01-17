@@ -8,25 +8,24 @@
 int main() {
     TransportSystem::TransportCatalogue catalogue;
 
-    TransportSystem::InputReader reader(std::cin); 
-    
     int base_request_count;
     std::cin >> base_request_count >> std::ws;
 
-    for (int i = 0; i < base_request_count; ++i) {
-        std::string line;
-        std::getline(std::cin, line);
-        reader.ParseLine(line, catalogue);
+    {
+        TransportSystem::InputReader reader;
+        for (int i = 0; i < base_request_count; ++i) {
+            std::string line;
+            std::getline(std::cin, line);
+            reader.ParseLine(line, catalogue);
+        }
     }
 
-    TransportSystem::StatReader stat_reader(std::cin, std::cout);
-    
     int stat_request_count;
     std::cin >> stat_request_count >> std::ws;
     for (int i = 0; i < stat_request_count; ++i) {
         std::string line;
         std::getline(std::cin, line);
-        stat_reader.ParseAndPrintStat(catalogue, line);
+        TransportSystem::StatReader::ParseAndPrintStat(catalogue, line, std::cout);
     }
 
     return 0;

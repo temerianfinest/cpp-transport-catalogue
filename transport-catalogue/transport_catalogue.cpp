@@ -17,7 +17,6 @@ bool TransportCatalogue::IsCircularRoute(const std::vector<std::string>& stops) 
 void TransportCatalogue::AddBusRoute(const std::string& name, const std::vector<std::string>& stops) {
     BusRoute route;
 
-    // Copy strings from stops to route.stops
     route.stops.reserve(stops.size());
     for (const auto& stop : stops) {
         route.stops.push_back(stop);
@@ -85,6 +84,7 @@ std::vector<std::string> TransportCatalogue::GetBusesAtStop(const std::string& s
             }
         }
     }
+
 
     std::sort(buses.begin(), buses.end(), [](const std::string& bus1, const std::string& bus2) {
         return bus1 < bus2;
