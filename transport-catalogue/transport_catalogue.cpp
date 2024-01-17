@@ -85,7 +85,6 @@ std::vector<std::string> TransportCatalogue::GetBusesAtStop(const std::string& s
         }
     }
 
-
     std::sort(buses.begin(), buses.end(), [](const std::string& bus1, const std::string& bus2) {
         return bus1 < bus2;
     });

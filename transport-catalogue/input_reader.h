@@ -17,7 +17,12 @@ struct CommandDescription {
 
 class InputReader {
 public:
+    explicit InputReader(std::istream& input_stream);
+    
     void ParseLine(std::string_view line, TransportCatalogue& catalogue);
+
+private:
+    std::istream& input_stream_; 
 };
 
 } // namespace TransportSystem
