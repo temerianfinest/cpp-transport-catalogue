@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <iomanip>
 #include <sstream>
+#include <iostream>
 
 namespace TransportSystem {
 
@@ -47,15 +48,34 @@ std::string TransportCatalogue::GetBusRouteInfo(const std::string& name) const {
 
     const BusRoute* route = GetBusRoute(name);
     if (route) {
-        double route_length = ComputeRouteLength(route->stops);
+        double route_length = 0.0;
+        bool reverse_different = false; 
+
+        for (size_t i = 1; i < route->stops.size(); ++i) {
+            int distance = GetDistanceBetweenStops(route->stops[i - 1], route->stops[i]);
+            
+            route_length += distance;
+            if (distance != GetDistanceBetweenStops(route->stops[i], route->stops[i - 1])) {
+                reverse_different = true;
+            }
+        }
+
+        if (!route->is_circular && reverse_different) {
+            for (size_t i = route->stops.size() - 1; i > 0; --i) {
+                route_length += GetDistanceBetweenStops(route->stops[i], route->stops[i - 1]);
+            }
+        }
+
+        int rounded_route_length = static_cast<int>(std::round(route_length));
 
         result << "Bus " << name << ": " << route->stops.size() << " stops on route, "
-               << route->unique_stops.size() << " unique stops, " << std::fixed << std::setprecision(2)
-               << route_length << " route length";
+               << route->unique_stops.size() << " unique stops, " << rounded_route_length << " route length";
     } else {
         result << "Bus " << name << ": not found";
     }
 
+    
+    
     return result.str();
 }
 
@@ -90,6 +110,35 @@ std::vector<std::string> TransportCatalogue::GetBusesAtStop(const std::string& s
     });
 
     return buses;
+}
+    
+    void TransportCatalogue::SetDistanceBetweenStops(const std::string& stop1, const std::string& stop2, int distance) {
+    auto reverse_distance_it = distances_.find({stop2, stop1});
+    if (reverse_distance_it == distances_.end()) {
+        
+        distances_[{stop2, stop1}] = distance;
+    }
+    distances_[{stop1, stop2}] = distance;
+}
+
+int TransportCatalogue::GetDistanceBetweenStops(const std::string& stop1, const std::string& stop2) const {
+    auto it = distances_.find({stop1, stop2});
+    if (it != distances_.end()) {
+        return it->second;
+    }
+
+    it = distances_.find({stop2, stop1});
+    return it != distances_.end() ? it->second : -1;
+}
+    
+    double TransportCatalogue::ComputeGeographicalRouteLength(const std::vector<std::string>& stops) const {
+    double total_length = 0.0;
+    for (size_t i = 1; i < stops.size(); ++i) {
+        const Stop& stop1 = stops_.at(stops[i - 1]);
+        const Stop& stop2 = stops_.at(stops[i]);
+        total_length += ComputeDistance(stop1.coordinates, stop2.coordinates);
+    }
+    return total_length;
 }
 
 } // namespace TransportSystem

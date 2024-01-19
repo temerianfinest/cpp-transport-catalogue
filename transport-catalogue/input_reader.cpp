@@ -1,4 +1,5 @@
 #include "input_reader.h"
+#include <regex>
 
 namespace TransportSystem {
 
@@ -81,6 +82,7 @@ CommandDescription ParseCommandDescription(std::string_view line) {
             line.substr(colon_pos + 1)};
 }
 
+// Добавлено определение функций-членов CommandDescription
 CommandDescription::operator bool() const {
     return !command.empty() && !id.empty() && !description.empty();
 }
@@ -88,8 +90,21 @@ CommandDescription::operator bool() const {
 bool CommandDescription::operator!() const {
     return !static_cast<bool>(*this);
 }
+    
+    void InputReader::ParseAndSetDistances(const std::string& desc, const std::string& stop_name, TransportCatalogue& catalogue) {
+    std::regex distance_regex(R"((\d+)m to ([^,]+))");
+    std::smatch matches;
+    std::string::const_iterator search_start(desc.cbegin());
 
-void InputReader::ParseLine(std::string_view line, TransportCatalogue& catalogue) {
+    while (std::regex_search(search_start, desc.cend(), matches, distance_regex)) {
+        int distance = std::stoi(matches[1].str());
+        std::string other_stop = std::string(Trim(matches[2].str()));  // Trim the stop name
+        catalogue.SetDistanceBetweenStops(stop_name, other_stop, distance);
+        search_start = matches.suffix().first;
+    }
+}
+
+void InputReader::FirstPassParseLine(std::string_view line, TransportCatalogue& catalogue) {
     auto command_description = ParseCommandDescription(line);
     if (command_description) {
         std::string command_str = std::string(command_description.command);
@@ -99,6 +114,19 @@ void InputReader::ParseLine(std::string_view line, TransportCatalogue& catalogue
         if (command_str == "Stop") {
             Coordinates coordinates = ParseCoordinates(desc_str);
             catalogue.AddStop(id_str, coordinates);
+        }
+    }
+}
+
+void InputReader::SecondPassParseLine(std::string_view line, TransportCatalogue& catalogue) {
+    auto command_description = ParseCommandDescription(line);
+    if (command_description) {
+        std::string command_str = std::string(command_description.command);
+        std::string id_str = std::string(command_description.id);
+        std::string desc_str = std::string(command_description.description);
+
+        if (command_str == "Stop") {
+            ParseAndSetDistances(desc_str, id_str, catalogue);
         } else if (command_str == "Bus") {
             std::vector<std::string> stops = ParseRoute(desc_str);
             catalogue.AddBusRoute(id_str, stops);

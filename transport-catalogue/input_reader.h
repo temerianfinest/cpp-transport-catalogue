@@ -19,8 +19,12 @@ class InputReader {
 public:
     explicit InputReader(std::istream& input_stream);
     
-    void ParseLine(std::string_view line, TransportCatalogue& catalogue);
+     void FirstPassParseLine(std::string_view line, TransportCatalogue& catalogue);
+    void SecondPassParseLine(std::string_view line, TransportCatalogue& catalogue);
 
+    void ParseAndSetDistances(const std::string& desc, const std::string& stop_name, TransportCatalogue& catalogue);
+    
+    
 private:
     std::istream& input_stream_; 
 };
