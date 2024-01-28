@@ -11,12 +11,12 @@ namespace Renderer
 		return settings_;
 	}
 
-	void MapRenderer::SetSphereProjector(const std::vector<Geo::Coordinates>& coords)
+	void MapRenderer::SetSphereProjector(const std::vector<geo::Coordinates>& coords)
 	{
 		projector_ = SphereProjector(coords.cbegin(), coords.cend(), settings_.width, settings_.height, settings_.padding);
 	}
 
-	svg::Point MapRenderer::Project(const Geo::Coordinates& coords) const
+	svg::Point MapRenderer::Project(const geo::Coordinates& coords) const
 	{
 		return projector_(coords);
 	}

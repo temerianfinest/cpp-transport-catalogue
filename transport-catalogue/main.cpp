@@ -1,18 +1,18 @@
 #include <iostream>
 #include <string>
+
 #include "json_reader.h"
 
-int main() {
-    TransportCatalogue::TransportCatalogue catalogue;
+int main() 
+{
+    transport_catalogue::TransportCatalogue catalogue;
 
-    JSON::Reader jsonReader(std::cin);
-    const auto& rendererSettings = jsonReader.GetRendererSettingsReader();
-    const auto& baseRequestReader = jsonReader.GetBaseRequestReader();
-    const auto& statRequestReader = jsonReader.GetStatRequestReader();
+    json::Reader reader(std::cin);
+    const auto& rsr = reader.GetRendererSettingsReader();
+    const auto& brr = reader.GetBaseRequestReader();
+    const auto& srr = reader.GetStatRequestReader();
 
-    TransportCatalogue::RequestHandler requestHandler(catalogue, rendererSettings.GetRenderSettings());
-    requestHandler.ProcessRequests(baseRequestReader.GetBaseRequests());
-    auto responses = requestHandler.GetResponse(statRequestReader.GetStatRequests());
-
-    JSON::Print(JSON::ParseResponses(responses), std::cout);
+    transport_catalogue::RequestHandler rh(catalogue, rsr.GetRenderSettings());
+    rh.ProcessRequests(brr.GetBaseRequests());
+    json::Print(json::ParseResponses(rh.GetResponse(srr.GetStatRequests())), std::cout);
 }

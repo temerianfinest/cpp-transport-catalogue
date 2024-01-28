@@ -1,27 +1,24 @@
 #include "json_reader.h"
 
-namespace JSON {
+namespace json
+{
+	Reader::Reader(std::istream& input)
+	{
+		Node root = Load(input).GetRoot();
 
-    Reader::Reader(std::istream& input) {
-        Node root = Load(input).GetRoot();
+		if (!root.IsDict())
+			return;
 
-        if (!root.IsMap()) {
-            return;
-        }
+		const auto& data = root.AsDict();
+		if (data.count("base_requests"))
+			base_request_reader_ = BaseRequestReader(data.at("base_requests"));
 
-        const auto& data = root.AsMap();
-        if (data.count("base_requests")) {
-            base_request_reader_ = BaseRequestReader(data.at("base_requests"));
-        }
+		if (data.count("render_settings"))
+			render_settings_reader_ = RendererSettingsReader(data.at("render_settings"));
 
-        if (data.count("render_settings")) {
-            render_settings_reader_ = RendererSettingsReader(data.at("render_settings"));
-        }
-
-        if (data.count("stat_requests")) {
-            stat_request_reader_ = StatRequestReader(data.at("stat_requests"));
-        }
-    }
+		if (data.count("stat_requests"))
+			stat_request_reader_ = StatRequestReader(data.at("stat_requests"));
+	}
 
 	BaseRequestReader Reader::GetBaseRequestReader() const
 	{
@@ -38,7 +35,7 @@ namespace JSON {
 		return render_settings_reader_;
 	}
 
-	BaseRequestReader::BaseRequestReader(const::JSON::Node& node)
+	BaseRequestReader::BaseRequestReader(const Node& node)
 	{
 		if (!node.IsArray())
 			return;
@@ -49,17 +46,17 @@ namespace JSON {
 			ParseRequest(request);
 	}
 
-	TransportCatalogue::BaseRequests BaseRequestReader::GetBaseRequests() const
+	transport_catalogue::BaseRequests BaseRequestReader::GetBaseRequests() const
 	{
 		return requests_;
 	}
 
-	void BaseRequestReader::ParseRequest(const::JSON::Node& node)
+	void BaseRequestReader::ParseRequest(const Node& node)
 	{
-		if (!node.IsMap())
+		if (!node.IsDict())
 			return;
 
-		const auto& request = node.AsMap();
+		const auto& request = node.AsDict();
 		const auto& type = request.at("type").AsString();
 
 		if (type == "Stop")
@@ -68,23 +65,23 @@ namespace JSON {
 			ParseBusRequest(request);
 	}
 
-	void BaseRequestReader::ParseStopRequest(const::JSON::Dict& stop_request)
+	void BaseRequestReader::ParseStopRequest(const Dict& stop_request)
 	{
-		TransportCatalogue::BaseStopRequest request;
+		transport_catalogue::BaseStopRequest request;
 		request.name = stop_request.at("name").AsString();
 		request.coordinates.lat = stop_request.at("latitude").AsDouble();
 		request.coordinates.lng = stop_request.at("longitude").AsDouble();
 
-		const auto& road_distances = stop_request.at("road_distances").AsMap();
+		const auto& road_distances = stop_request.at("road_distances").AsDict();
 		for (const auto& [name, distance] : road_distances)
-			request.distances.push_back(TransportCatalogue::StopDistance{ name, distance.AsInt() });
+			request.distances.push_back(transport_catalogue::StopDistance{ name, distance.AsInt() });
 
 		requests_.push_back(std::move(request));
 	}
 
-	void BaseRequestReader::ParseBusRequest(const::JSON::Dict& bus_request)
+	void BaseRequestReader::ParseBusRequest(const Dict& bus_request)
 	{
-		TransportCatalogue::BaseBusRequest request;
+		transport_catalogue::BaseBusRequest request;
 		request.name = bus_request.at("name").AsString();
 		const auto& stops = bus_request.at("stops").AsArray();
 		for (const auto& stop : stops)
@@ -94,7 +91,7 @@ namespace JSON {
 		requests_.push_back(std::move(request));
 	}
 
-	StatRequestReader::StatRequestReader(const::JSON::Node& node)
+	StatRequestReader::StatRequestReader(const Node& node)
 	{
 		if (!node.IsArray())
 			return;
@@ -105,17 +102,17 @@ namespace JSON {
 			ParseRequest(request);
 	}
 
-	TransportCatalogue::StatRequests StatRequestReader::GetStatRequests() const
+	transport_catalogue::StatRequests StatRequestReader::GetStatRequests() const
 	{
 		return requests_;
 	}
 
-	void StatRequestReader::ParseRequest(const::JSON::Node& node)
+	void StatRequestReader::ParseRequest(const Node& node)
 	{
-		if (!node.IsMap())
+		if (!node.IsDict())
 			return;
 
-		const auto& request = node.AsMap();
+		const auto& request = node.AsDict();
 		const auto& type = request.at("type").AsString();
 
 		if (type == "Bus")
@@ -126,108 +123,106 @@ namespace JSON {
 			ParseMapRequest(request);
 	}
 
-	void StatRequestReader::ParseBusRequest(const::JSON::Dict& node)
+	void StatRequestReader::ParseBusRequest(const Dict& node)
 	{
-		TransportCatalogue::StatBusRequest request{ node.at("id").AsInt(), node.at("name").AsString() };
+		transport_catalogue::StatBusRequest request{ node.at("id").AsInt(), node.at("name").AsString() };
 		requests_.push_back(request);
 	}
 
-	void StatRequestReader::ParseStopRequest(const::JSON::Dict& node)
+	void StatRequestReader::ParseStopRequest(const Dict& node)
 	{
-		TransportCatalogue::StatStopRequest request{ node.at("id").AsInt(), node.at("name").AsString() };
+		transport_catalogue::StatStopRequest request{ node.at("id").AsInt(), node.at("name").AsString() };
 		requests_.push_back(request);
 	}
 
-	void StatRequestReader::ParseMapRequest(const::JSON::Dict& node)
+	void StatRequestReader::ParseMapRequest(const Dict& node)
 	{
-		TransportCatalogue::StatMapRequest request{ node.at("id").AsInt() };
-		requests_.emplace_back(request);
+		transport_catalogue::StatMapRequest request{ node.at("id").AsInt() };
+		requests_.push_back(request);
 	}
 
 	Document ParseResponses(const std::vector<ResponseType>& responses)
 	{
-		Array array;
+		Builder builder;
+		builder.StartArray();
 
 		for (const auto& response : responses)
-			array.push_back(ParseResponse(response).GetRoot());
+			ParseResponse(response, builder);
 
-		Node node(array);
-		return Document(node);
+		builder.EndArray();
+		return Document(builder.Build());
 	}
 
-	Document ParseResponse(const ResponseType& response)
+	void ParseResponse(const ResponseType& response, Builder& context)
 	{
-		if (std::holds_alternative<TransportCatalogue::Response<TransportCatalogue::StopResponse>>(response))
-			return StopResponse(std::get<TransportCatalogue::Response<TransportCatalogue::StopResponse>>(response));
-
-		if (std::holds_alternative<TransportCatalogue::Response<TransportCatalogue::BusResponse>>(response))
-			return BusResponse(std::get<TransportCatalogue::Response<TransportCatalogue::BusResponse>>(response));
-
-		if (std::holds_alternative<TransportCatalogue::Response<TransportCatalogue::MapResponse>>(response))
-			return MapResponse(std::get<TransportCatalogue::Response<TransportCatalogue::MapResponse>>(response));
-		
-		throw std::invalid_argument("Unknown request type!");
+		using namespace transport_catalogue;
+		if (std::holds_alternative<Response<transport_catalogue::StopResponse>>(response))
+			StopResponse(std::get<Response<transport_catalogue::StopResponse>>(response), context);
+		else if (std::holds_alternative<Response<transport_catalogue::BusResponse>>(response))
+			BusResponse(std::get<Response<transport_catalogue::BusResponse>>(response), context);
+		else if (std::holds_alternative<Response<transport_catalogue::MapResponse>>(response))
+			MapResponse(std::get<Response<transport_catalogue::MapResponse>>(response), context);
 	}
 
-	Document StopResponse(const TransportCatalogue::Response<TransportCatalogue::StopResponse>& response)
-	{		
+	void StopResponse(const HandlerStopResponse& response, Builder& context)
+	{	
 		if (!response.response.has_value())
-			return NotFoundError(response.id);
+		{
+			NotFoundError(response.id, context);
+			return;
+		}
 		
-		Dict root;
-		root["request_id"] = response.id;
+		context.StartDict().Key("request_id").Value(response.id).
+			Key("buses").StartArray();
 
-		Array buses;
 		for (const auto& bus : response.response->result)
-			buses.push_back(bus);
-		root["buses"] = buses;
+			context.Value(bus);
 		
-		Node node(root);
-		return Document(node);
+		context.EndArray();
+		context.EndDict();
 	}
 
-	Document BusResponse(const TransportCatalogue::Response<TransportCatalogue::BusResponse>& response)
+	void BusResponse(const HandlerBusResponse& response, Builder& context)
 	{
 		if (!response.response.has_value())
-			return NotFoundError(response.id);
-		
-		Dict root;
-		root["request_id"] = response.id;
-		root["curvature"] = response.response->curvature;
-		root["route_length"] = response.response->distance;
-		root["stop_count"] = response.response->stops_count;
-		root["unique_stop_count"] = response.response->unique_stops_count;
-		
-		Node node(root);
-		return Document(node);
+		{
+			NotFoundError(response.id, context);
+			return;
+		}
+
+		context.StartDict().Key("request_id").Value(response.id).
+			Key("curvature").Value(response.response->curvature).Key("route_length").Value(response.response->distance).
+			Key("stop_count").Value(response.response->stops_count).
+			Key("unique_stop_count").Value(response.response->unique_stops_count);
+
+		context.EndDict();
 	}
 
-	Document MapResponse(const TransportCatalogue::Response<TransportCatalogue::MapResponse>& response)
+	void MapResponse(const HandlerMapResponse& response, Builder& context)
 	{
 		using namespace std::string_literals;
-		Dict root;
-		root["request_id"] = response.id;
-		root["map"] = response.response->response;
-		Node node(root);
-		return Document(node);
+
+		context.StartDict().Key("request_id").Value(response.id).
+			Key("map").Value(response.response->response);
+
+		context.EndDict();
 	}
 
-	Document NotFoundError(int id)
+	void NotFoundError(int id, Builder& context)
 	{
 		using namespace std::string_literals;
-		Dict root;
-		root["request_id"] = id;
-		root["error_message"] = "not found"s;
-		Node node(root);
-		return Document(node);
+		
+		context.StartDict().Key("request_id").Value(id).
+			Key("error_message").Value("not found"s);
+		context.EndDict();
 	}
 
 	RendererSettingsReader::RendererSettingsReader(const Node& node)
 	{
-		if (!node.IsMap())
+		if (!node.IsDict())
 			return;
 
-		const auto& settings = node.AsMap();
+		const auto& settings = node.AsDict();
 
 		settings_.width = settings.at("width").AsDouble();
 		settings_.height = settings.at("height").AsDouble();

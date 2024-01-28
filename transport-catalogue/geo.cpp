@@ -1,7 +1,7 @@
 #include "geo.h"
 
 
-namespace Geo
+namespace geo
 {
     double ComputeDistance(Coordinates from, Coordinates to)
     {

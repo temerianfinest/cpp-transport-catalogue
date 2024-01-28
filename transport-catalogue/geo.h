@@ -2,7 +2,7 @@
 
 #include <cmath>
 
-namespace Geo
+namespace geo
 {
     const int EARTH_RADIUS_M = 6371000;
 

@@ -9,7 +9,7 @@
 #include <set>
 #include <sstream>
 
-namespace TransportCatalogue
+namespace transport_catalogue
 {
 	struct StopDistance
 	{
@@ -20,7 +20,7 @@ namespace TransportCatalogue
 	struct BaseStopRequest
 	{
 		std::string name;
-		Geo::Coordinates coordinates;
+		geo::Coordinates coordinates;
 		std::vector<StopDistance> distances;
 	};
 
@@ -84,12 +84,13 @@ namespace TransportCatalogue
 
 		void ProcessRequests(BaseRequests requests);
 
-		std::vector<VariadicResponse> GetResponse(const StatRequests& requests);
-		VariadicResponse GetResponse(const StatRequest& request);
-		Response<StopResponse> GetStopResponse(const StatStopRequest& request);
-		Response<BusResponse> GetBusResponse(const StatBusRequest& request);
-		Response<MapResponse> GetMapResponse(const StatMapRequest& request);
-		void RenderRoutes(std::ostream& output);
+		std::vector<VariadicResponse> GetResponse(const StatRequests& requests) const;
+		VariadicResponse GetResponse(const StatRequest& request) const;
+		Response<StopResponse> GetStopResponse(const StatStopRequest& request) const;
+		Response<BusResponse> GetBusResponse(const StatBusRequest& request) const;
+		Response<MapResponse> GetMapResponse(const StatMapRequest& request) const;
+
+		void RenderRoutes(std::ostream& output) const;
 	private:
 		void ProcessStopRequests(const std::vector<BaseStopRequest>& stop_requests);
 		void ProcessBusRequests(const std::vector<BaseBusRequest>& bus_requests);
@@ -111,7 +112,7 @@ namespace TransportCatalogue
 		std::vector<Type> FilterBy(const BaseRequests& requests) const;
 	private:
 		TransportCatalogue& tp_;
-		Renderer::MapRenderer map_renderer_;
+		mutable Renderer::MapRenderer map_renderer_;
 	};
 
 	template <class Type>

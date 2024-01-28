@@ -65,12 +65,13 @@ namespace Renderer
                 zoom_coeff_ = *width_zoom;
             }
             else if (height_zoom) {
-
+                // Коэффициент масштабирования по высоте ненулевой, используем его
                 zoom_coeff_ = *height_zoom;
             }
         }
 
-        svg::Point operator()(Geo::Coordinates coords) const {
+        // Проецирует широту и долготу в координаты внутри SVG-изображения
+        svg::Point operator()(geo::Coordinates coords) const {
             return {
                 (coords.lng - min_lon_) * zoom_coeff_ + padding_,
                 (max_lat_ - coords.lat) * zoom_coeff_ + padding_
@@ -118,9 +119,9 @@ namespace Renderer
 
         const RenderSettings& GetSettings() const;
 
-        void SetSphereProjector(const std::vector<Geo::Coordinates>& coords);
+        void SetSphereProjector(const std::vector<geo::Coordinates>& coords);
 
-        svg::Point Project(const Geo::Coordinates& coords) const;
+        svg::Point Project(const geo::Coordinates& coords) const;
 
         svg::Polyline CreateRouteLine(const svg::Color& color) const;
         svg::Circle CreateStopCircle(const svg::Point& point) const;

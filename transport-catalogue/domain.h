@@ -5,12 +5,12 @@
 
 #include "geo.h"
 
-namespace TransportCatalogue
+namespace transport_catalogue
 {
 	struct Stop
 	{
 		std::string name;
-		Geo::Coordinates coordinates;
+		geo::Coordinates coordinates;
 	};
 
 	struct Bus
@@ -28,6 +28,7 @@ namespace TransportCatalogue
 		double curvature;
 	};
 
+	//using StopResponse = std::set<std::string>;
 
 	struct StopResponse
 	{

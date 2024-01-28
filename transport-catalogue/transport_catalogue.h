@@ -9,7 +9,7 @@
 
 #include "domain.h"
 
-namespace TransportCatalogue
+namespace transport_catalogue
 {
 	struct PointerPairHasher
 	{

@@ -5,7 +5,7 @@
 #include <numeric>
 #include <iterator>
 
-namespace TransportCatalogue
+namespace transport_catalogue
 {
 	void TransportCatalogue::AddStop(const Stop& stop)
 	{

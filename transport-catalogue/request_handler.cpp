@@ -7,7 +7,7 @@
 #include <unordered_set>
 #include <set>
 
-namespace TransportCatalogue
+namespace transport_catalogue
 {
 	RequestHandler::RequestHandler(TransportCatalogue& transport_catalogue, const Renderer::MapRenderer& map_renderer)
 		: tp_(transport_catalogue), map_renderer_(map_renderer)
@@ -19,7 +19,7 @@ namespace TransportCatalogue
 		ProcessBusRequests(FilterBy<BaseBusRequest>(requests));
 	}
 
-	std::vector<VariadicResponse> RequestHandler::GetResponse(const StatRequests& requests)
+	std::vector<VariadicResponse> RequestHandler::GetResponse(const StatRequests& requests) const
 	{
 		std::vector<VariadicResponse> responses;
 		responses.reserve(requests.size());
@@ -28,7 +28,7 @@ namespace TransportCatalogue
 		return responses;
 	}
 
-	VariadicResponse RequestHandler::GetResponse(const StatRequest& request)
+	VariadicResponse RequestHandler::GetResponse(const StatRequest& request) const
 	{
 		if (std::holds_alternative<StatBusRequest>(request))
 			return GetBusResponse(std::get<StatBusRequest>(request));
@@ -42,24 +42,24 @@ namespace TransportCatalogue
 		throw std::invalid_argument("Unknown request type");
 	}
 
-	Response<BusResponse> RequestHandler::GetBusResponse(const StatBusRequest& request)
+	Response<BusResponse> RequestHandler::GetBusResponse(const StatBusRequest& request) const
 	{
 		return { request.id, tp_.GetBusInfo(request.name) };
 	}
 
-	Response<MapResponse> RequestHandler::GetMapResponse(const StatMapRequest& request)
+	Response<MapResponse> RequestHandler::GetMapResponse(const StatMapRequest& request) const
 	{
 		std::stringstream response;
 		RenderRoutes(response);
 		return { request.id,  MapResponse{ response.str() } };
 	}
 
-	void RequestHandler::RenderRoutes(std::ostream& output)
+	void RequestHandler::RenderRoutes(std::ostream& output) const
 	{
 		const auto& routes = tp_.GetRoutes();
 
 		OrderedBusMap bus_to_route_stops;
-		std::vector<Geo::Coordinates> coordinates;
+		std::vector<geo::Coordinates> coordinates;
 
 		for (const auto& [name, bus] : routes)
 		{
@@ -77,7 +77,7 @@ namespace TransportCatalogue
 		CreateMap(bus_to_route_stops).Render(output);
 	}
 
-	Response<StopResponse> RequestHandler::GetStopResponse(const StatStopRequest& request)
+	Response<StopResponse> RequestHandler::GetStopResponse(const StatStopRequest& request) const
 	{
 		return { request.id, tp_.GetStopInfo(request.name) };
 	}
