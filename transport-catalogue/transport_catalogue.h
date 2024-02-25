@@ -1,52 +1,43 @@
 #pragma once
-
-#include <deque>
-#include <string>
+#include "geo.h"
 #include <unordered_map>
-#include <set>
+#include <string_view>
+#include <string>
+#include <deque>
 #include <vector>
+#include <functional>
+#include <set>
+#include <cstdint>
+#include "domain.h"
 #include <optional>
 
-#include "domain.h"
+namespace transport_catalogue {
 
-namespace transport_catalogue
-{
-	struct PointerPairHasher
-	{
-		size_t operator()(const std::pair<const Stop*, const Stop*>& stops) const
-		{
-			return hasher_(stops.first) * 37 + hasher_(stops.second) * 37 * 37;
-		}
-	private:
-		std::hash<const void*> hasher_;
-	};
+    namespace detail {
+        std::string_view FindName(std::string_view &sv, char separator);
+    }
 
-	class TransportCatalogue
-	{
-		using NearbyStops = std::pair<const Stop*, const Stop*>;
-	public:
-		void AddStop(const Stop& stop);
-		void AddBus(const std::string& name, const std::vector<std::string_view>& stops, bool roundtrip);
+    class TransportCatalogue {
+    public:
+        TransportCatalogue() = default;
+        explicit TransportCatalogue(std::deque<std::string> queries);
+        Stop FindStop(std::string_view stop);
+        Bus FindBus(std::string_view bus);
+        BusRoute RouteInformation(std::string_view bus) const;
+        StopRoutes StopInformation(std::string_view stop) const;
+        const std::unordered_map<std::string_view, Bus> & GetBuses() const;
+        std::optional<uint32_t> GetDistanceBetweenStops(const Stop& lhs, const Stop& rhs) const;
+        const std::unordered_map<std::string_view, Stop>& GetStops() const;
 
-		void SetNearbyStop(const std::string_view stop, const std::string_view nearby, int distance);
+    private:
+        std::deque<std::string> queries_;
+        std::unordered_map<std::string_view, Stop> stops_;
+        std::unordered_map<std::string_view, Bus> buses_;
+        std::unordered_map<std::string_view, std::set<std::string_view>> buses_for_stops_;
 
-		std::optional<BusResponse> GetBusInfo(const std::string_view name) const;
-		std::optional<StopResponse> GetStopInfo(const std::string_view stop) const;
-
-		std::unordered_map<std::string_view, const Bus*> GetRoutes() const;
-	private:
-		int GetDistanceBetweenStops(const Stop* stop, const Stop* nearby) const;
-		double GetActualDistance(const Bus* bus) const;
-		double GetGeographicDistance(const Bus* bus) const;
-	private:
-		std::deque<Stop> stops_;
-		std::unordered_map<std::string_view, const Stop*> stopname_to_stop_;
-
-		std::deque<Bus> buses_;
-		std::unordered_map<std::string_view, const Bus*> busname_to_route_;
-
-		std::unordered_map<const Stop*, std::set<std::string>> stop_to_busname_;
-
-		std::unordered_map<NearbyStops, int, PointerPairHasher> nearby_stops_to_distance_;
-	};
-}
+        void AddStop(std::string_view stop_sv);
+        void AddNextStops(Stop &stop);
+        void AddBus(std::string_view bus_sv);
+        void ComputeRealRouteLength(Bus &bus);
+    };
+}//namespace transport_catalogue

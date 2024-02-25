@@ -1,37 +1,38 @@
 #pragma once
 #include <string>
+#include <string_view>
 #include <vector>
+#include <unordered_map>
 #include <set>
 
-#include "geo.h"
+struct Stop {
+    std::string_view stop_name;
+    double latitude = 0.0;
+    double longitude = 0.0;
+    std::string_view next_stops; // Поле для временного хранения строки со следующими остановками
+    std::unordered_map<std::string_view, std::uint32_t> dist_to_next;
+};
 
-namespace transport_catalogue
-{
-	struct Stop
-	{
-		std::string name;
-		geo::Coordinates coordinates;
-	};
+struct Bus {
+    std::string_view bus_name;
+    std::vector<const Stop *> route;
+    bool is_circle = false;
+    double r_length = 0.0;
+    double true_length = 0.0;
+    double curvature = 0.0;
+};
 
-	struct Bus
-	{
-		std::string name;
-		std::vector<const Stop*> route;
-		bool roundtrip;
-	};
+struct BusRoute {
+    std::string bus_name;
+    size_t stops = 0;
+    size_t unique_stops = 0;
+    double true_length = 0.0;
+    double curvature = 0.0;
+    bool is_found = false;
+};
 
-	struct BusResponse
-	{
-		int stops_count;
-		int unique_stops_count;
-		double distance;
-		double curvature;
-	};
-
-	//using StopResponse = std::set<std::string>;
-
-	struct StopResponse
-	{
-		std::set<std::string> result;
-	};
-}
+struct StopRoutes {
+    std::string stop_name;
+    std::set<std::string_view> routes;
+    bool is_found = false;
+};

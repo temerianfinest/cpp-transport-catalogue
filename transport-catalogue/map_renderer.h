@@ -1,136 +1,108 @@
 #pragma once
+
 #include "svg.h"
 #include "geo.h"
-
+#include "domain.h"
 #include <algorithm>
+#include <map>
+#include <utility>
 
-namespace Renderer
-{
-    inline const double EPSILON = 1e-6;
+struct RendererSettings {
+    double width = 0.0;
+    double height = 0.0;
+    double padding = 0.0;
+    double line_width = 0.0;
+    double stop_radius = 0.0;
+    int bus_label_font_size = 0;
+    svg::Point bus_label_offset = {0.0, 0.0};
+    int stop_label_font_size = 0;
+    svg::Point stop_label_offset = {0.0, 0.0};
+    svg::Color underlayer_color;
+    double underlayer_width = 0.0;
+    std::vector<svg::Color> color_palette;
+};
 
-    inline bool IsZero(double value) 
-    {
-        return std::abs(value) < EPSILON;
-    }
+inline const double EPSILON = 1e-6;
 
-    class SphereProjector 
-    {
-    public:
-        // points_begin и points_end задают начало и конец интервала элементов geo::Coordinates
-        SphereProjector() = default;
+bool IsZero(double value);
 
-        template <typename PointInputIt>
-        SphereProjector(PointInputIt points_begin, PointInputIt points_end,
-            double max_width, double max_height, double padding)
-            : padding_(padding) //
-        {
-            // Если точки поверхности сферы не заданы, вычислять нечего
-            if (points_begin == points_end) {
-                return;
-            }
-
-            // Находим точки с минимальной и максимальной долготой
-            const auto [left_it, right_it] = std::minmax_element(
-                points_begin, points_end,
-                [](auto lhs, auto rhs) { return lhs.lng < rhs.lng; });
-            min_lon_ = left_it->lng;
-            const double max_lon = right_it->lng;
-
-            // Находим точки с минимальной и максимальной широтой
-            const auto [bottom_it, top_it] = std::minmax_element(
-                points_begin, points_end,
-                [](auto lhs, auto rhs) { return lhs.lat < rhs.lat; });
-            const double min_lat = bottom_it->lat;
-            max_lat_ = top_it->lat;
-
-            // Вычисляем коэффициент масштабирования вдоль координаты x
-            std::optional<double> width_zoom;
-            if (!IsZero(max_lon - min_lon_)) {
-                width_zoom = (max_width - 2 * padding) / (max_lon - min_lon_);
-            }
-
-            // Вычисляем коэффициент масштабирования вдоль координаты y
-            std::optional<double> height_zoom;
-            if (!IsZero(max_lat_ - min_lat)) {
-                height_zoom = (max_height - 2 * padding) / (max_lat_ - min_lat);
-            }
-
-            if (width_zoom && height_zoom) {
-                // Коэффициенты масштабирования по ширине и высоте ненулевые,
-                // берём минимальный из них
-                zoom_coeff_ = std::min(*width_zoom, *height_zoom);
-            }
-            else if (width_zoom) {
-                // Коэффициент масштабирования по ширине ненулевой, используем его
-                zoom_coeff_ = *width_zoom;
-            }
-            else if (height_zoom) {
-                // Коэффициент масштабирования по высоте ненулевой, используем его
-                zoom_coeff_ = *height_zoom;
-            }
+class SphereProjector {
+public:
+    template <typename PointInputIt>
+    SphereProjector(PointInputIt points_begin, PointInputIt points_end, double max_width,
+                    double max_height, double padding)
+            : padding_(padding) {
+        if (points_begin == points_end) {
+            return;
         }
 
-        // Проецирует широту и долготу в координаты внутри SVG-изображения
-        svg::Point operator()(geo::Coordinates coords) const {
-            return {
-                (coords.lng - min_lon_) * zoom_coeff_ + padding_,
-                (max_lat_ - coords.lat) * zoom_coeff_ + padding_
-            };
+        const auto [left_it, right_it]
+        = std::minmax_element(points_begin, points_end, [](auto lhs, auto rhs) {
+            return lhs.lng < rhs.lng;
+        });
+        min_lon_ = left_it->lng;
+        const double max_lon = right_it->lng;
+
+        const auto [bottom_it, top_it]
+        = std::minmax_element(points_begin, points_end, [](auto lhs, auto rhs) {
+            return lhs.lat < rhs.lat;
+        });
+        const double min_lat = bottom_it->lat;
+        max_lat_ = top_it->lat;
+
+        std::optional<double> width_zoom;
+        if (!IsZero(max_lon - min_lon_)) {
+            width_zoom = (max_width - 2 * padding) / (max_lon - min_lon_);
         }
 
-    private:
-        double padding_;
-        double min_lon_ = 0;
-        double max_lat_ = 0;
-        double zoom_coeff_ = 0;
-    };
+        std::optional<double> height_zoom;
+        if (!IsZero(max_lat_ - min_lat)) {
+            height_zoom = (max_height - 2 * padding) / (max_lat_ - min_lat);
+        }
 
-	using Offset = std::pair<double, double>;
-
-    template <class T>
-    T CyclicIteration(const std::vector<svg::Color>& container, T iterator)
-    {
-        if (std::next(iterator) == container.end())
-            return container.cbegin();
-    
-        return std::next(iterator);
+        if (width_zoom && height_zoom) {
+            zoom_coeff_ = std::min(*width_zoom, *height_zoom);
+        } else if (width_zoom) {
+            zoom_coeff_ = *width_zoom;
+        } else if (height_zoom) {
+            zoom_coeff_ = *height_zoom;
+        }
     }
 
-	struct RenderSettings
-	{
-		double width, height;
-		double padding;
-		double line_width;
-		double stop_radius;
-		int bus_label_font_size;
-		Offset bus_label_offset;
-		int stop_label_font_size;
-		Offset stop_label_offset;
-		svg::Color underlayer_color;
-		double underlayer_width;
-		std::vector<svg::Color> color_palette;
+    svg::Point operator()(geo::Coordinates coords) const {
+        return {(coords.lng - min_lon_) * zoom_coeff_ + padding_,
+                (max_lat_ - coords.lat) * zoom_coeff_ + padding_};
+    }
 
-	};
+private:
+    double padding_;
+    double min_lon_ = 0;
+    double max_lat_ = 0;
+    double zoom_coeff_ = 0;
+};
 
-	class MapRenderer
-	{
-	public:
-		MapRenderer(const RenderSettings& settings);
+class MapRenderer {
+public:
+    MapRenderer(const RendererSettings& settings, std::map<std::string_view, std::shared_ptr<Bus>> routes_to_render)
+            : renderer_settings_(settings)
+            , routes_to_render_(std::move(routes_to_render))
+            {
+    }
+    svg::Polyline RenderRoute(std::shared_ptr<Bus>& bus, const svg::Color& color);
+    svg::Color ColorSelector(uint32_t index);
+    std::pair<svg::Text, svg::Text> RenderSingleRouteName(std::shared_ptr<Bus>& bus, svg::Point text_coords, const svg::Color& color);
+    svg::Circle RenderStopCircle(const Stop* stop, const svg::Color &color);
+    std::pair<svg::Text, svg::Text> RenderStopName(const Stop* stop, const svg::Color& color);
 
-        const RenderSettings& GetSettings() const;
+    svg::Document RenderMap();
 
-        void SetSphereProjector(const std::vector<geo::Coordinates>& coords);
-
-        svg::Point Project(const geo::Coordinates& coords) const;
-
-        svg::Polyline CreateRouteLine(const svg::Color& color) const;
-        svg::Circle CreateStopCircle(const svg::Point& point) const;
-        svg::Text CreateRouteName(const std::string& name, const svg::Point& point, const svg::Color& color) const;
-        svg::Text CreateMountForLabel(const svg::Text& label) const;
-        svg::Text CreateStopName(const std::string& name, const svg::Point& point) const;
-	private:
-		const RenderSettings settings_;
-        SphereProjector projector_;
-	};
-}
-
+private:
+    const RendererSettings& renderer_settings_;
+    std::map<std::string_view, std::shared_ptr<Bus>> routes_to_render_;
+    std::map<std::string_view, const Stop*> stops_to_render_;
+    std::vector<geo::Coordinates> GetStopsCoordinates(const std::map<std::string_view, std::shared_ptr<Bus>>& buses);
+    std::vector<geo::Coordinates> stop_coordinates_ = GetStopsCoordinates(routes_to_render_);
+    const SphereProjector canvas_ = SphereProjector(stop_coordinates_.begin(), stop_coordinates_.end(),
+                                                    renderer_settings_.width, renderer_settings_.height,
+                                                    renderer_settings_.padding);
+};

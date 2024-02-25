@@ -1,272 +1,242 @@
 #include "json_reader.h"
+#include "json_builder.h"
+#include <sstream>
 
-namespace json
-{
-	Reader::Reader(std::istream& input)
-	{
-		Node root = Load(input).GetRoot();
+namespace json_reader {
 
-		if (!root.IsDict())
-			return;
+    JsonReader::JsonReader(const json::Document& document){
+        if(!document.GetRoot().IsMap()){
+            throw std::invalid_argument("Incorrect JSON");
+        }
+        const auto& query_map = document.GetRoot().AsMap();
+        if(!query_map.count("base_requests") || !query_map.count("stat_requests")
+            || !query_map.count("render_settings") || !query_map.count("routing_settings")){
+            throw std::invalid_argument("Incorrect JSON");
+        }
+        JsonBaseReader(query_map.at("base_requests").AsArray());
+        JsonStatReader(query_map.at("stat_requests").AsArray());
+        JsonRenderSettingsReader(query_map.at("render_settings").AsMap());
+        JsonRouterSettingsReader(query_map.at("routing_settings").AsMap());
+    }
 
-		const auto& data = root.AsDict();
-		if (data.count("base_requests"))
-			base_request_reader_ = BaseRequestReader(data.at("base_requests"));
+    const std::deque<std::string>& JsonReader::BaseRequestsReturn(){
+        return base_request_;
+    }
+    const std::vector<std::pair<int, std::string>>& JsonReader::StatRequestsReturn(){
+        return stat_request_;
+    }
 
-		if (data.count("render_settings"))
-			render_settings_reader_ = RendererSettingsReader(data.at("render_settings"));
+    const RendererSettings& JsonReader::RenderSettingsReturn(){
+        return render_settings_;
+    }
 
-		if (data.count("stat_requests"))
-			stat_request_reader_ = StatRequestReader(data.at("stat_requests"));
-	}
+    void JsonReader::JsonBaseReader(const json::Array& base){
+        for(const auto& query : base){
+            if(!query.IsMap()){
+                throw std::invalid_argument("Incorrect base requests");
+            }
+            if(query.AsMap().at("type").AsString() == "Stop"){
+                base_request_.push_front(JsonStopToString(query.AsMap()));
+            }
+            if(query.AsMap().at("type").AsString() == "Bus"){
+                base_request_.push_back(JsonBusToString(query.AsMap()));
+            }
+        }
+    }
 
-	BaseRequestReader Reader::GetBaseRequestReader() const
-	{
-		return base_request_reader_;
-	}
+    void JsonReader::JsonStatReader(const json::Array& stat){
+        for(const auto& query : stat){
+            if(!query.IsMap() || !query.AsMap().count("type") || !query.AsMap().count("id")){
+                throw std::invalid_argument("Incorrect stat requests");
+            }
+            std::string request;
+            request += query.AsMap().at("type").AsString();
+            if(query.AsMap().count("name")) {
+                request += ' ';
+                request += query.AsMap().at("name").AsString();
+            }
+            if(query.AsMap().count("from") && query.AsMap().count("to")){
+                request += ' ';
+                request += query.AsMap().at("from").AsString();
+                request += " -> ";
+                request += query.AsMap().at("to").AsString();
+            }
+            stat_request_.push_back({query.AsMap().at("id").AsInt(), request});
+            }
+    }
 
-	StatRequestReader Reader::GetStatRequestReader() const
-	{
-		return stat_request_reader_;
-	}
+    void JsonReader::JsonRenderSettingsReader(const json::Dict& settings){
+        render_settings_.width = settings.at("width").AsDouble();
+        render_settings_.height = settings.at("height").AsDouble();
+        render_settings_.padding = settings.at("padding").AsDouble();
+        render_settings_.line_width = settings.at("line_width").AsDouble();
+        render_settings_.stop_radius = settings.at("stop_radius").AsDouble();
+        render_settings_.bus_label_font_size = settings.at("bus_label_font_size").AsInt();
+        render_settings_.bus_label_offset.x = settings.at("bus_label_offset").AsArray().front().AsDouble();
+        render_settings_.bus_label_offset.y = settings.at("bus_label_offset").AsArray().back().AsDouble();
+        render_settings_.stop_label_font_size = settings.at("stop_label_font_size").AsInt();
+        render_settings_.stop_label_offset.x = settings.at("stop_label_offset").AsArray().front().AsDouble();
+        render_settings_.stop_label_offset.y = settings.at("stop_label_offset").AsArray().back().AsDouble();
+        render_settings_.underlayer_color = ReadColor(settings.at("underlayer_color"));
+        render_settings_.underlayer_width = settings.at("underlayer_width").AsDouble();
+        for(const auto& color : settings.at("color_palette").AsArray()){
+            render_settings_.color_palette.push_back(ReadColor(color));
+        }
+    }
 
-	RendererSettingsReader Reader::GetRendererSettingsReader() const
-	{
-		return render_settings_reader_;
-	}
+    svg::Color JsonReader::ReadColor(const json::Node& node){
+        if (node.IsString()) {
+            return node.AsString();
+        }
+        else if (node.IsArray()) {
+            const auto& color = node.AsArray();
 
-	BaseRequestReader::BaseRequestReader(const Node& node)
-	{
-		if (!node.IsArray())
-			return;
+            if (color.size() == 3) {
+                return svg::Rgb(
+                        color.at(0).AsInt(),
+                        color.at(1).AsInt(),
+                        color.at(2).AsInt()
+                );
+            }
+            else if (color.size() == 4) {
+                return svg::Rgba(
+                        color.at(0).AsInt(),
+                        color.at(1).AsInt(),
+                        color.at(2).AsInt(),
+                        color.at(3).AsDouble()
+                );
+            }
+        }
+        throw std::invalid_argument("Can't read color from JSON");
+    }
 
-		const auto& requests = node.AsArray();
+    std::string JsonReader::JsonStopToString(const json::Dict& json_stop){
+        std::stringstream result;
+        result.precision(15);
+        if(json_stop.at("type").AsString() == "Stop") {
+            result << json_stop.at("type").AsString();
+            result << ' ';
+            result << json_stop.at("name").AsString();
+            result << ": ";
+            result << json_stop.at("latitude").AsDouble();
+            result << ", ";
+            result << json_stop.at("longitude").AsDouble();
+            if(!json_stop.at("road_distances").AsMap().empty()) {
+                result << ", ";
+                bool is_first = true;
+                for (const auto &next_stop: json_stop.at("road_distances").AsMap()) {
+                    if(!is_first){
+                        result << ", ";
+                    }
+                    result << next_stop.second.AsInt();
+                    result << "m to ";
+                    result << next_stop.first;
+                    is_first = false;
+                }
+            }
+        }
+        else{
+            throw std::invalid_argument("Incorrect JSON: not a stop description");
+        }
+        return result.str();
+    }
 
-		for (const auto& request : requests)
-			ParseRequest(request);
-	}
+    std::string JsonReader::JsonBusToString(const json::Dict& json_bus){
+        std::string result;
+        if(json_bus.at("type").AsString() == "Bus") {
+            result += json_bus.at("type").AsString();
+            result += ' ';
+            result += json_bus.at("name").AsString();
+            result += ": ";
+            bool is_circle = json_bus.at("is_roundtrip").AsBool();
+            bool is_first = true;
+            std::string separator = is_circle ? " > " : " - ";
+            for(const auto& stop : json_bus.at("stops").AsArray()){
+                if(!is_first){
+                    result += separator;
+                }
+                result += stop.AsString();
+                is_first = false;
+            }
+        }
+        else{
+            throw std::invalid_argument("Incorrect JSON: not a bus description");
+        }
+        return result;
+    }
 
-	transport_catalogue::BaseRequests BaseRequestReader::GetBaseRequests() const
-	{
-		return requests_;
-	}
+    json::Document JsonReader::MakeJSON(const std::vector<std::pair<int, std::variant<BusRoute, StopRoutes, svg::Document, BusTripRoute>>>& answers) {
+        using namespace std::string_literals;
+        json::Builder builder;
+        builder.StartArray();
+        for (const auto &answer: answers) {
+            builder.StartDict().Key("request_id"s).Value(answer.first);
+            if (std::holds_alternative<BusRoute>(answer.second)) {
+                const auto &bus = std::get<BusRoute>(answer.second);
+                if (bus.is_found) {
+                    builder.Key("curvature"s).Value(bus.curvature)
+                            .Key("route_length"s).Value(bus.true_length)
+                            .Key("stop_count"s).Value(static_cast<int>(bus.stops))
+                            .Key("unique_stop_count"s).Value(static_cast<int>(bus.unique_stops)).EndDict();
+                } else {
+                    builder.Key("error_message"s).Value("not found"s).EndDict();
+                }
+            }
+            if (std::holds_alternative<StopRoutes>(answer.second)) {
+                const auto &stop = std::get<StopRoutes>(answer.second);
+                if (stop.is_found) {
+                    builder.Key("buses"s).StartArray();
+                    for (const auto &bus: stop.routes) {
+                        std::string bus_str = {bus.data(), bus.size()};
+                        builder.Value(bus_str);
+                    }
+                    builder.EndArray().EndDict();
+                } else {
+                    builder.Key("error_message"s).Value("not found"s).EndDict();
+                }
+            }
+            if (std::holds_alternative<svg::Document>(answer.second)) {
+                const auto &svg_doc = std::get<svg::Document>(answer.second);
+                std::stringstream svg_str;
+                svg_doc.Render(svg_str);
+                builder.Key("map"s).Value(svg_str.str()).EndDict();
+            }
+            if (std::holds_alternative<BusTripRoute>(answer.second)){
+                const auto &bus_trip_route = std::get<BusTripRoute>(answer.second);
+                if(bus_trip_route.is_found) {
+                    builder.Key("total_time"s).Value(bus_trip_route.total_time_).Key("items"s).StartArray();
+                    if(!bus_trip_route.stages_.empty()) {
+                        for (const auto &stage: bus_trip_route.stages_) {
+                            builder.StartDict().Key("type"s).Value("Wait"s).Key("stop_name"s).Value(
+                                            std::string(stage.stops_.first))
+                                    .Key("time"s).Value(router_settings_.bus_wait_time_).EndDict();
+                            builder.StartDict().Key("type"s).Value("Bus"s).Key("bus"s).Value(
+                                            std::string(stage.bus_name_))
+                                    .Key("span_count"s).Value(static_cast<int>(stage.span_count_))
+                                    .Key("time"s).Value(stage.time_ - router_settings_.bus_wait_time_).EndDict();
+                        }
+                        builder.EndArray();
+                    }
+                    else{
+                        builder.EndArray();
+                    }
+                    builder.EndDict();
+                }
+                else{
+                    builder.Key("error_message"s).Value("not found"s).EndDict();
+                }
+            }
+        }
+                builder.EndArray();
+        return json::Document(builder.Build());
+    }
 
-	void BaseRequestReader::ParseRequest(const Node& node)
-	{
-		if (!node.IsDict())
-			return;
+    const RouterSettings &JsonReader::RouterSettingsReturn() {
+        return router_settings_;
+    }
 
-		const auto& request = node.AsDict();
-		const auto& type = request.at("type").AsString();
-
-		if (type == "Stop")
-			ParseStopRequest(request);
-		else if (type == "Bus")
-			ParseBusRequest(request);
-	}
-
-	void BaseRequestReader::ParseStopRequest(const Dict& stop_request)
-	{
-		transport_catalogue::BaseStopRequest request;
-		request.name = stop_request.at("name").AsString();
-		request.coordinates.lat = stop_request.at("latitude").AsDouble();
-		request.coordinates.lng = stop_request.at("longitude").AsDouble();
-
-		const auto& road_distances = stop_request.at("road_distances").AsDict();
-		for (const auto& [name, distance] : road_distances)
-			request.distances.push_back(transport_catalogue::StopDistance{ name, distance.AsInt() });
-
-		requests_.push_back(std::move(request));
-	}
-
-	void BaseRequestReader::ParseBusRequest(const Dict& bus_request)
-	{
-		transport_catalogue::BaseBusRequest request;
-		request.name = bus_request.at("name").AsString();
-		const auto& stops = bus_request.at("stops").AsArray();
-		for (const auto& stop : stops)
-			request.stops.push_back(stop.AsString());
-		request.roundtrip = bus_request.at("is_roundtrip").AsBool();
-
-		requests_.push_back(std::move(request));
-	}
-
-	StatRequestReader::StatRequestReader(const Node& node)
-	{
-		if (!node.IsArray())
-			return;
-
-		const auto& stat_requests = node.AsArray();
-
-		for (const auto& request : stat_requests)
-			ParseRequest(request);
-	}
-
-	transport_catalogue::StatRequests StatRequestReader::GetStatRequests() const
-	{
-		return requests_;
-	}
-
-	void StatRequestReader::ParseRequest(const Node& node)
-	{
-		if (!node.IsDict())
-			return;
-
-		const auto& request = node.AsDict();
-		const auto& type = request.at("type").AsString();
-
-		if (type == "Bus")
-			ParseBusRequest(request);
-		else if (type == "Stop")
-			ParseStopRequest(request);
-		else if (type == "Map")
-			ParseMapRequest(request);
-	}
-
-	void StatRequestReader::ParseBusRequest(const Dict& node)
-	{
-		transport_catalogue::StatBusRequest request{ node.at("id").AsInt(), node.at("name").AsString() };
-		requests_.push_back(request);
-	}
-
-	void StatRequestReader::ParseStopRequest(const Dict& node)
-	{
-		transport_catalogue::StatStopRequest request{ node.at("id").AsInt(), node.at("name").AsString() };
-		requests_.push_back(request);
-	}
-
-	void StatRequestReader::ParseMapRequest(const Dict& node)
-	{
-		transport_catalogue::StatMapRequest request{ node.at("id").AsInt() };
-		requests_.push_back(request);
-	}
-
-	Document ParseResponses(const std::vector<ResponseType>& responses)
-	{
-		Builder builder;
-		builder.StartArray();
-
-		for (const auto& response : responses)
-			ParseResponse(response, builder);
-
-		builder.EndArray();
-		return Document(builder.Build());
-	}
-
-	void ParseResponse(const ResponseType& response, Builder& context)
-	{
-		using namespace transport_catalogue;
-		if (std::holds_alternative<Response<transport_catalogue::StopResponse>>(response))
-			StopResponse(std::get<Response<transport_catalogue::StopResponse>>(response), context);
-		else if (std::holds_alternative<Response<transport_catalogue::BusResponse>>(response))
-			BusResponse(std::get<Response<transport_catalogue::BusResponse>>(response), context);
-		else if (std::holds_alternative<Response<transport_catalogue::MapResponse>>(response))
-			MapResponse(std::get<Response<transport_catalogue::MapResponse>>(response), context);
-	}
-
-	void StopResponse(const HandlerStopResponse& response, Builder& context)
-	{	
-		if (!response.response.has_value())
-		{
-			NotFoundError(response.id, context);
-			return;
-		}
-		
-		context.StartDict().Key("request_id").Value(response.id).
-			Key("buses").StartArray();
-
-		for (const auto& bus : response.response->result)
-			context.Value(bus);
-		
-		context.EndArray();
-		context.EndDict();
-	}
-
-	void BusResponse(const HandlerBusResponse& response, Builder& context)
-	{
-		if (!response.response.has_value())
-		{
-			NotFoundError(response.id, context);
-			return;
-		}
-
-		context.StartDict().Key("request_id").Value(response.id).
-			Key("curvature").Value(response.response->curvature).Key("route_length").Value(response.response->distance).
-			Key("stop_count").Value(response.response->stops_count).
-			Key("unique_stop_count").Value(response.response->unique_stops_count);
-
-		context.EndDict();
-	}
-
-	void MapResponse(const HandlerMapResponse& response, Builder& context)
-	{
-		using namespace std::string_literals;
-
-		context.StartDict().Key("request_id").Value(response.id).
-			Key("map").Value(response.response->response);
-
-		context.EndDict();
-	}
-
-	void NotFoundError(int id, Builder& context)
-	{
-		using namespace std::string_literals;
-		
-		context.StartDict().Key("request_id").Value(id).
-			Key("error_message").Value("not found"s);
-		context.EndDict();
-	}
-
-	RendererSettingsReader::RendererSettingsReader(const Node& node)
-	{
-		if (!node.IsDict())
-			return;
-
-		const auto& settings = node.AsDict();
-
-		settings_.width = settings.at("width").AsDouble();
-		settings_.height = settings.at("height").AsDouble();
-		settings_.padding = settings.at("padding").AsDouble();
-		settings_.stop_radius = settings.at("stop_radius").AsDouble();
-		settings_.line_width = settings.at("line_width").AsDouble();
-		settings_.bus_label_font_size = settings.at("bus_label_font_size").AsInt();
-		
-		settings_.bus_label_offset = GetOffset(settings.at("bus_label_offset"));
-
-		settings_.stop_label_font_size = settings.at("stop_label_font_size").AsInt();
-
-		settings_.stop_label_offset = GetOffset(settings.at("stop_label_offset"));
-
-		settings_.underlayer_color = GetColor(settings.at("underlayer_color"));
-
-		settings_.underlayer_width = settings.at("underlayer_width").AsDouble();
-
-		for (const auto& color : settings.at("color_palette").AsArray())
-			settings_.color_palette.push_back(GetColor(color));
-	}
-
-	Renderer::RenderSettings RendererSettingsReader::GetRenderSettings() const
-	{
-		return settings_;
-	}
-
-	svg::Color RendererSettingsReader::GetColor(const Node& node) const
-	{
-		if (node.IsArray())
-		{
-			const auto& color = node.AsArray();
-			if (color.size() == 3)
-				return svg::Rgb(color[0].AsInt(), color[1].AsInt(), color[2].AsInt());
-			else
-				return svg::Rgba(color[0].AsInt(), color[1].AsInt(), color[2].AsInt(), color[3].AsDouble());
-		}
-		else
-			return node.AsString();
-	}
-
-	Renderer::Offset RendererSettingsReader::GetOffset(const Node& node) const
-	{
-		const auto& offset = node.AsArray();
-		return { offset.at(0).AsDouble(), offset.at(1).AsDouble() };
-	}
-}
+    void JsonReader::JsonRouterSettingsReader(const json::Dict &settings) {
+        router_settings_.bus_wait_time_ = settings.at("bus_wait_time").AsInt();
+        router_settings_.bus_velocity_ = settings.at("bus_velocity").AsDouble();
+    }
+}//namespace json_reader

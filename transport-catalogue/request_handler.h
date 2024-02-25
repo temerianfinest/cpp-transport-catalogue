@@ -1,132 +1,37 @@
 #pragma once
 #include "transport_catalogue.h"
-#include "map_renderer.h"
-
+#include "json_reader.h"
 #include <variant>
-#include <algorithm>
-#include <map>
-#include <unordered_set>
-#include <set>
-#include <sstream>
+#include <memory>
 
-namespace transport_catalogue
-{
-	struct StopDistance
-	{
-		std::string name;
-		int distance;
-	};
+namespace request_handler {
+    class RequestHandler {
+    public:
+        using TransportCatalogue = transport_catalogue::TransportCatalogue;
 
-	struct BaseStopRequest
-	{
-		std::string name;
-		geo::Coordinates coordinates;
-		std::vector<StopDistance> distances;
-	};
+        RequestHandler(const TransportCatalogue &db, const std::vector<std::pair<int, std::string>>& requests);
+        RequestHandler(const TransportCatalogue &db, const std::vector<std::pair<int, std::string>>& requests, RendererSettings renderer_settings, const TransportRouter& router);
 
-	struct BaseBusRequest
-	{
-		std::string name;
-		std::vector<std::string> stops;
-		bool roundtrip;
-	};
+        // Возвращает информацию о маршруте (запрос Bus)
+        BusRoute GetBusStat(const std::string_view &bus_name) const;
 
-	using BaseRequest = std::variant<BaseStopRequest, BaseBusRequest>;
-	using BaseRequests = std::vector<BaseRequest>;
+        // Возвращает маршруты, проходящие через
+        StopRoutes GetBusesByStop(const std::string_view &stop_name) const;
 
-	// TODO: Выделить запросы в шаблон по аналогии с Response
-	struct StatBusRequest
-	{
-		int id;
-		std::string name;
-	};
+        //Возвращает словарь ответов
+        const std::vector<std::pair<int, std::variant<BusRoute, StopRoutes, svg::Document, BusTripRoute>>>& GetAnswers() const;
 
-	struct StatStopRequest
-	{
-		int id;
-		std::string name;
-	};
+        //Возвращает список непустых маршрутов
+        std::map<std::string_view, std::shared_ptr<Bus>> GetActiveBuses();
 
-	struct StatMapRequest
-	{
-		int id;
-	};
+        //Загружает объект MapRenderer
 
-	using StatRequest = std::variant<StatBusRequest, StatStopRequest, StatMapRequest>;
-	using StatRequests = std::vector<StatRequest>;
 
-	template <class ResponseType>
-	struct Response
-	{
-		int id;
-		std::optional<ResponseType> response;
-	};
-
-	struct MapResponse
-	{
-		std::string response;
-	};
-
-	using VariadicResponse = std::variant<Response<BusResponse>, Response<StopResponse>, Response<MapResponse>>;
-
-	struct LexicalComparator
-	{
-		bool operator()(const Stop* lhs, const Stop* rhs) const
-		{
-			return lhs->name < rhs->name;
-		}
-	};
-
-	class RequestHandler
-	{
-	public:
-		RequestHandler(TransportCatalogue& transport_catalogue, const Renderer::MapRenderer& map_renderer);
-
-		void ProcessRequests(BaseRequests requests);
-
-		std::vector<VariadicResponse> GetResponse(const StatRequests& requests) const;
-		VariadicResponse GetResponse(const StatRequest& request) const;
-		Response<StopResponse> GetStopResponse(const StatStopRequest& request) const;
-		Response<BusResponse> GetBusResponse(const StatBusRequest& request) const;
-		Response<MapResponse> GetMapResponse(const StatMapRequest& request) const;
-
-		void RenderRoutes(std::ostream& output) const;
-	private:
-		void ProcessStopRequests(const std::vector<BaseStopRequest>& stop_requests);
-		void ProcessBusRequests(const std::vector<BaseBusRequest>& bus_requests);
-
-		using OrderedBusMap = std::map<std::string_view, const Bus*>;
-		svg::Document CreateMap(const OrderedBusMap& bus_to_route_stops) const;
-
-		void CreateRouteLines(svg::Document& document, const OrderedBusMap& bus_to_route_stops) const;
-
-		using StopsInfo = std::pair<std::vector<const Stop*>, bool>;
-		using OrderedBusMapToUniqueStop = std::map<std::string_view, StopsInfo>;
-		void CreateRouteName(svg::Document& document, const OrderedBusMapToUniqueStop& stops) const;
-
-		using OrderedUniqueStops = std::set<const Stop*, LexicalComparator>;
-		void CreateStopCircles(svg::Document& document, const OrderedUniqueStops& stops) const;
-		void CreateStopNames(svg::Document& document, const OrderedUniqueStops& stops) const;
-
-		template<class Type>
-		std::vector<Type> FilterBy(const BaseRequests& requests) const;
-	private:
-		TransportCatalogue& tp_;
-		mutable Renderer::MapRenderer map_renderer_;
-	};
-
-	template <class Type>
-	std::vector<Type> RequestHandler::FilterBy(const BaseRequests& requests) const
-	{
-		std::vector<Type> result;
-		std::for_each(requests.cbegin(), requests.cend(),
-			[&result](const BaseRequest& request)
-			{
-				if (std::holds_alternative<Type>(request))
-					result.push_back(std::get<Type>(request));
-			});
-
-		return result;
-	}
-}
-
+    private:
+        const TransportCatalogue &db_;
+        const std::vector<std::pair<int, std::string>>& requests_;
+        std::vector<std::pair<int, std::variant<BusRoute, StopRoutes, svg::Document, BusTripRoute>>> answers_;
+        RendererSettings renderer_settings_;
+        TransportRouter router_;
+    };
+}//namespace request_handler
